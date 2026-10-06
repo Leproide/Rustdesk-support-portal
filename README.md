@@ -4,7 +4,7 @@
   License: GPL-3.0
 -->
 
-# RustDesk Client Updater
+# RustDesk support portal with client updater
 
 Publishes the latest **RustDesk** clients for **Windows, macOS and Linux** on your own server, preconfigured (or easy to configure) for your self-hosted ID/relay server.
 
