@@ -1,0 +1,5 @@
+# RustDesk Client Updater - Author: https://github.com/Leproide - License: GPL-3.0
+* text=auto
+*.sh   text eol=lf
+*.ps1  text eol=crlf
+*.html text eol=lf

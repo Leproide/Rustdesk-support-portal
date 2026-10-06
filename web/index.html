@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<!--
+    RustDesk Client Updater - Remote support download page
+    Version: 2.1.0
+    Author:  https://github.com/Leproide
+
+    Copyright (C) 2026  https://github.com/Leproide
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+    Place this page in the same folder as the files published by the updater
+    scripts. It reads the manifest (rustdesk.json), detects the visitor's OS
+    (and Linux distribution when the browser reveals it), starts the matching
+    download and shows the setup steps. Italian for Italian browsers, English
+    otherwise. Settings: see CONFIG below.
+
+    Testing overrides: ?os=windows|macos|linux|mobile  &arch=x64|arm64
+                       &distro=deb|rpm|suse|appimage|unknown
+-->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex">
+    <title>Remote support</title>
+    <style>
+        :root {
+            --bg1: #0a2a43;
+            --bg2: #0d47a1;
+            --card: rgba(255, 255, 255, 0.08);
+            --line: rgba(255, 255, 255, 0.18);
+            --text: #ffffff;
+            --muted: rgba(255, 255, 255, 0.8);
+            --accent: #a5d6ff;
+            --button: #1e88e5;
+            --button-hover: #42a5f5;
+            --ghost: rgba(255, 255, 255, 0.12);
+            --ghost-hover: rgba(255, 255, 255, 0.2);
+        }
+        * { box-sizing: border-box; }
+        html, body { height: 100%; }
+        body {
+            margin: 0;
+            min-height: 100%;
+            background: linear-gradient(135deg, var(--bg1), var(--bg2));
+            background-attachment: fixed;
+            font-family: Arial, Helvetica, sans-serif;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px 16px;
+        }
+        .box {
+            background: var(--card);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 36px 32px;
+            text-align: center;
+            width: 100%;
+            max-width: 540px;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.4);
+        }
+        .logo { width: 180px; max-width: 60%; margin-bottom: 20px; }
+        h1 { margin: 0 0 10px; font-size: 24px; }
+        p { margin: 10px 0; font-size: 16px; line-height: 1.45; color: var(--muted); }
+        .os { font-size: 14px; margin-top: 4px; }
+        .status { margin-top: 16px; font-weight: bold; color: var(--accent); min-height: 1.4em; }
+        .btn {
+            display: inline-block;
+            margin-top: 14px;
+            padding: 13px 26px;
+            border: 0;
+            border-radius: 10px;
+            background: var(--button);
+            color: #fff;
+            font-size: 17px;
+            font-weight: bold;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .btn:hover, .btn:focus-visible { background: var(--button-hover); }
+        .btn.small { padding: 7px 14px; font-size: 14px; margin-top: 8px; }
+        .sub { font-size: 14px; margin: 6px 0 0; }
+        .alt { display: inline-block; margin-top: 10px; font-size: 14px; color: var(--accent); }
+        a { color: var(--accent); }
+        .choices { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+        .choice {
+            display: block;
+            padding: 12px 16px;
+            border-radius: 10px;
+            background: var(--ghost);
+            color: var(--text);
+            text-decoration: none;
+            text-align: left;
+        }
+        .choice:hover, .choice:focus-visible { background: var(--ghost-hover); }
+        .choice strong { display: block; font-size: 16px; }
+        .choice span { font-size: 13px; color: var(--muted); }
+        .steps { text-align: left; margin-top: 24px; border-top: 1px solid var(--line); padding-top: 16px; }
+        .steps h2 { font-size: 17px; margin: 0 0 8px; }
+        .steps ol { margin: 0; padding-left: 24px; }
+        .steps li { margin: 10px 0; line-height: 1.45; color: var(--muted); }
+        .steps li strong { color: var(--text); }
+        pre {
+            text-align: left;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 10px;
+            font-size: 12.5px;
+            white-space: pre-wrap;
+            word-break: break-all;
+            margin: 8px 0 0;
+            color: #e3f2fd;
+        }
+        details { text-align: left; }
+        details.more { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 12px; }
+        details.inline { margin-top: 6px; }
+        summary { cursor: pointer; color: var(--accent); font-size: 14px; }
+        details.more > summary { font-size: 15px; }
+        details p { font-size: 14px; }
+        .files { list-style: none; padding: 0; margin: 10px 0 0; }
+        .files li { margin: 7px 0; font-size: 14px; color: var(--muted); }
+        .footer { margin-top: 20px; font-size: 12px; }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<main class="box">
+    <img class="logo" src="https://rustdesk.com/_astro/logo.BKb61-he.svg" alt="RustDesk" onerror="this.remove()">
+    <h1 id="title"></h1>
+    <p id="intro"></p>
+    <p class="os" id="os"></p>
+
+    <div id="primary"></div>
+    <p class="status" id="status" role="status" aria-live="polite"></p>
+
+    <section class="steps hidden" id="steps">
+        <h2 id="steps-title"></h2>
+        <ol id="steps-list"></ol>
+        <div id="steps-extra"></div>
+    </section>
+
+    <details class="more hidden" id="others">
+        <summary id="others-title"></summary>
+        <ul class="files" id="others-list"></ul>
+    </details>
+
+    <p class="footer" id="footer"></p>
+</main>
+
+<script>
+(function () {
+    "use strict";
+
+    // ------------------------------------------------------------------
+    // Settings
+    // ------------------------------------------------------------------
+    var CONFIG = {
+        brand: "",                    // e.g. "ACME" -> "Remote support - ACME"
+        manifestUrl: "rustdesk.json", // written by the updater scripts
+        autoDownload: true,           // start the download automatically when the file is certain
+        autoDownloadDelayMs: 3000,
+        sessionKey: "rustdesk_download_started" // avoids repeated downloads on back/reload
+    };
+
+    // ------------------------------------------------------------------
+    // Texts (Italian for Italian browsers, English otherwise).
+    // Strings used with innerHTML are static and trusted; manifest values
+    // are always inserted as plain text.
+    // ------------------------------------------------------------------
+    var I18N = {
+        it: {
+            title: "Supporto remoto",
+            intro: "Tra pochi secondi verrà scaricato RustDesk, il programma che permette all'operatore di assisterti a distanza.",
+            introChoose: "Scarica RustDesk, il programma che permette all'operatore di assisterti a distanza.",
+            detected: "Sistema rilevato: {os}",
+            download: "Scarica RustDesk",
+            preparing: "Preparazione download…",
+            started: "Download avviato: controlla i download del browser.",
+            already: "Download già avviato. Controlla i download del browser.",
+            chooseLinux: "Scegli il pacchetto adatto alla tua distribuzione:",
+            wrongLinux: "Non è la tua distribuzione? Scegli un altro pacchetto",
+            altMacIntel: "Mac con processore Intel? Scarica questa versione",
+            altMacArm: "Mac con Apple Silicon (M1, M2, M3…)? Scarica questa versione",
+            stepsTitle: "Cosa fare dopo il download",
+            others: "Tutti i sistemi e i formati",
+            mobile: "Questa pagina è pensata per i computer (Windows, macOS, Linux). Aprila dal computer su cui serve assistenza.",
+            unknown: "Sistema non riconosciuto: scegli il file adatto dall'elenco qui sotto.",
+            noFile: "Nessun file disponibile per questo sistema: scegli dall'elenco qui sotto.",
+            error: "Impossibile caricare le informazioni di download. Riprova più tardi o contatta l'assistenza.",
+            copyCmd: "Copia comando",
+            copyConfig: "Copia configurazione",
+            copied: "Copiato!",
+            copyFail: "Copia non riuscita: seleziona il testo e copialo manualmente.",
+            terminal: "Preferisci il terminale?",
+            terminalConfig: "Alternativa: configurazione da terminale",
+            terminalConfigText: "Sostituisce i passaggi di configurazione qui sopra. Richiede RustDesk installato e la password di amministratore.",
+            footer: "RustDesk {version}",
+            fields: { host: "ID server", relay: "Server relay", api: "Server API", key: "Key" },
+            linuxDistros: {
+                deb: ["Ubuntu, Debian, Linux Mint", "pacchetto .deb"],
+                rpm: ["Fedora, RHEL, CentOS, Rocky, Alma", "pacchetto .rpm"],
+                suse: ["openSUSE, SUSE", "pacchetto .rpm"],
+                appimage: ["Altre distribuzioni", "AppImage, non richiede installazione"]
+            },
+            s: {
+                winOpen: "Apri il file scaricato. Se Windows chiede conferma, consenti l'esecuzione.",
+                macDrag: "Apri il file <strong>.dmg</strong> e trascina <strong>RustDesk</strong> nella cartella <strong>Applicazioni</strong>.",
+                macLaunch: "Avvia RustDesk dalla cartella <strong>Applicazioni</strong> e conferma l'apertura se richiesto.",
+                macPerms: "Concedi i permessi che RustDesk chiede (<strong>Registrazione schermo</strong> e <strong>Accessibilità</strong>) in Impostazioni di Sistema → Privacy e sicurezza.",
+                linInstall: "Apri il file scaricato e installalo con il gestore software.",
+                linAppImage: "Fai clic destro sul file → <strong>Proprietà</strong>, consenti l'esecuzione come programma, poi aprilo.",
+                linLaunch: "Avvia <strong>RustDesk</strong> dal menu delle applicazioni.",
+                cfgCopy: "Copia la configurazione del server con questo pulsante:",
+                cfgOpen: "In RustDesk premi <strong>⋮</strong> accanto all'ID e apri la sezione <strong>Rete</strong>. Se compare, premi <strong>Sblocca impostazioni di rete</strong>.",
+                cfgImport: "Premi <strong>Server ID/Relay</strong>, poi l'icona <strong>Importa configurazione server dagli appunti</strong> e conferma con <strong>OK</strong>. In alternativa scrivi a mano questi valori nei campi corrispondenti:",
+                ready: "Controlla che nella finestra di RustDesk, in basso, compaia <strong>Pronto</strong>.",
+                linShare: "Quando l'operatore si collega, se il sistema lo chiede, consenti la condivisione dello schermo.",
+                tell: "Comunica all'operatore l'<strong>ID</strong> e la <strong>password monouso</strong> mostrati da RustDesk."
+            }
+        },
+        en: {
+            title: "Remote support",
+            intro: "RustDesk will download in a few seconds. It lets the operator assist you remotely.",
+            introChoose: "Download RustDesk, the program that lets the operator assist you remotely.",
+            detected: "Detected system: {os}",
+            download: "Download RustDesk",
+            preparing: "Preparing download…",
+            started: "Download started: check your browser downloads.",
+            already: "Download already started. Check your browser downloads.",
+            chooseLinux: "Choose the package for your distribution:",
+            wrongLinux: "Not your distribution? Choose another package",
+            altMacIntel: "Mac with an Intel processor? Download this version",
+            altMacArm: "Mac with Apple Silicon (M1, M2, M3…)? Download this version",
+            stepsTitle: "After the download",
+            others: "All systems and formats",
+            mobile: "This page is meant for computers (Windows, macOS, Linux). Open it on the computer that needs assistance.",
+            unknown: "System not recognized: pick the right file from the list below.",
+            noFile: "No file available for this system: pick one from the list below.",
+            error: "Unable to load download information. Please try again later or contact support.",
+            copyCmd: "Copy command",
+            copyConfig: "Copy configuration",
+            copied: "Copied!",
+            copyFail: "Copy failed: select the text and copy it manually.",
+            terminal: "Prefer the terminal?",
+            terminalConfig: "Alternative: configure from a terminal",
+            terminalConfigText: "Replaces the configuration steps above. Requires RustDesk to be installed and the administrator password.",
+            footer: "RustDesk {version}",
+            fields: { host: "ID server", relay: "Relay server", api: "API server", key: "Key" },
+            linuxDistros: {
+                deb: ["Ubuntu, Debian, Linux Mint", ".deb package"],
+                rpm: ["Fedora, RHEL, CentOS, Rocky, Alma", ".rpm package"],
+                suse: ["openSUSE, SUSE", ".rpm package"],
+                appimage: ["Other distributions", "AppImage, no installation needed"]
+            },
+            s: {
+                winOpen: "Open the downloaded file. If Windows asks for confirmation, allow it to run.",
+                macDrag: "Open the <strong>.dmg</strong> file and drag <strong>RustDesk</strong> into the <strong>Applications</strong> folder.",
+                macLaunch: "Launch RustDesk from the <strong>Applications</strong> folder and confirm if macOS asks.",
+                macPerms: "Grant the permissions RustDesk asks for (<strong>Screen Recording</strong> and <strong>Accessibility</strong>) in System Settings → Privacy &amp; Security.",
+                linInstall: "Open the downloaded file and install it with the software manager.",
+                linAppImage: "Right-click the file → <strong>Properties</strong>, allow executing it as a program, then open it.",
+                linLaunch: "Launch <strong>RustDesk</strong> from the applications menu.",
+                cfgCopy: "Copy the server configuration with this button:",
+                cfgOpen: "In RustDesk press <strong>⋮</strong> next to the ID and open the <strong>Network</strong> section. If shown, press <strong>Unlock network settings</strong>.",
+                cfgImport: "Press <strong>ID/Relay Server</strong>, then the <strong>Import server config</strong> icon, and confirm with <strong>OK</strong>. Alternatively, type these values into the matching fields:",
+                ready: "Check that the RustDesk window shows <strong>Ready</strong> at the bottom.",
+                linShare: "When the operator connects, allow screen sharing if your system asks.",
+                tell: "Tell the operator the <strong>ID</strong> and the <strong>one-time password</strong> shown by RustDesk."
+            }
+        }
+    };
+
+    var PLATFORM_LABELS = {
+        "windows-x64": "Windows · 64 bit",
+        "windows-arm64": "Windows · ARM64",
+        "macos-arm64": "macOS · Apple Silicon",
+        "macos-x64": "macOS · Intel",
+        "linux-x64-deb": "Linux · .deb (Debian, Ubuntu, Mint)",
+        "linux-arm64-deb": "Linux ARM64 · .deb",
+        "linux-x64-rpm": "Linux · .rpm (Fedora, RHEL)",
+        "linux-arm64-rpm": "Linux ARM64 · .rpm",
+        "linux-x64-suse-rpm": "Linux · .rpm (openSUSE)",
+        "linux-arm64-suse-rpm": "Linux ARM64 · .rpm (openSUSE)",
+        "linux-x64-appimage": "Linux · AppImage",
+        "linux-arm64-appimage": "Linux ARM64 · AppImage"
+    };
+    var OS_NAMES = { windows: "Windows", macos: "macOS", linux: "Linux" };
+
+    // ------------------------------------------------------------------
+    // Language
+    // ------------------------------------------------------------------
+    var langs = (navigator.languages && navigator.languages.length) ? navigator.languages : [navigator.language || ""];
+    var lang = String(langs[0] || "").toLowerCase().indexOf("it") === 0 ? "it" : "en";
+    var T = I18N[lang];
+    document.documentElement.lang = lang;
+
+    // ------------------------------------------------------------------
+    // Small DOM helpers
+    // ------------------------------------------------------------------
+    function fmt(s, vars) {
+        return String(s).replace(/\{(\w+)\}/g, function (m, k) { return vars && k in vars ? vars[k] : m; });
+    }
+    function $(id) { return document.getElementById(id); }
+    function el(tag, attrs, text) {
+        var e = document.createElement(tag);
+        if (attrs) { for (var k in attrs) { if (attrs.hasOwnProperty(k)) { e.setAttribute(k, attrs[k]); } } }
+        if (text !== undefined) { e.textContent = text; }
+        return e;
+    }
+    function html(tag, markup) { var e = el(tag); e.innerHTML = markup; return e; }
+    function setStatus(text) { $("status").textContent = text || ""; }
+
+    // ------------------------------------------------------------------
+    // OS, architecture and Linux distribution detection
+    // ------------------------------------------------------------------
+    var QUERY = new URLSearchParams(location.search);
+
+    function detectOS() {
+        var forced = (QUERY.get("os") || "").toLowerCase();
+        if (/^(windows|macos|linux|mobile)$/.test(forced)) { return forced; }
+
+        // The User-Agent string is checked first (it is what UA switchers change);
+        // navigator.platform / userAgentData.platform are only a fallback.
+        var ua = navigator.userAgent || "";
+        if (/android/i.test(ua)) { return "mobile"; }
+        if (/iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) { return "mobile"; }
+        if (/Windows/.test(ua)) { return "windows"; }
+        if (/Mac OS X|Macintosh/.test(ua)) { return "macos"; }
+        if (/CrOS/.test(ua)) { return "unknown"; }
+        if (/Linux|X11/.test(ua)) { return "linux"; }
+
+        var p = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
+        if (/win/i.test(p)) { return "windows"; }
+        if (/mac/i.test(p)) { return "macos"; }
+        if (/linux|x11/i.test(p)) { return "linux"; }
+        return "unknown";
+    }
+
+    // Package family from the User-Agent. Firefox builds shipped by Fedora,
+    // Ubuntu and others add the distribution name; Chromium never does, so
+    // null ("unknown") is a normal result and the visitor is asked to choose.
+    function detectDistro() {
+        var forced = (QUERY.get("distro") || "").toLowerCase();
+        if (/^(deb|rpm|suse|appimage)$/.test(forced)) { return forced; }
+        if (forced === "unknown") { return null; }
+        var ua = navigator.userAgent || "";
+        if (/fedora|red ?hat|rhel|centos|rocky|almalinux/i.test(ua)) { return "rpm"; }
+        if (/suse/i.test(ua)) { return "suse"; }
+        if (/ubuntu|debian|linux ?mint|pop!?_?os|elementary|zorin|raspbian/i.test(ua)) { return "deb"; }
+        return null;
+    }
+
+    // Resolves to "arm64" or "x64" (best effort)
+    function detectArch(os) {
+        var forced = (QUERY.get("arch") || "").toLowerCase();
+        if (forced === "arm64" || forced === "x64") { return Promise.resolve(forced); }
+        var ua = navigator.userAgent || "";
+        function fallback() {
+            if (/aarch64|arm64|armv8/i.test(ua)) { return "arm64"; }
+            if (os === "macos") {
+                // WebGL renderer: an Intel/AMD/NVIDIA GPU means an Intel Mac; otherwise Apple Silicon
+                try {
+                    var gl = document.createElement("canvas").getContext("webgl");
+                    var ext = gl && gl.getExtension("WEBGL_debug_renderer_info");
+                    var r = ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : "";
+                    if (/intel|amd|radeon|nvidia/i.test(r)) { return "x64"; }
+                } catch (e) { /* ignore */ }
+                return "arm64";
+            }
+            return "x64";
+        }
+        // Chromium browsers expose the CPU architecture through User-Agent Client Hints
+        if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValues) {
+            return navigator.userAgentData.getHighEntropyValues(["architecture"]).then(function (v) {
+                if (v && v.architecture) { return /^arm/i.test(v.architecture) ? "arm64" : "x64"; }
+                return fallback();
+            }, fallback);
+        }
+        return Promise.resolve(fallback());
+    }
+
+    // Platform id of a Linux package family, if published
+    function linuxPlatform(family, arch, files) {
+        var a = arch === "arm64" ? "arm64" : "x64";
+        var id = {
+            deb: "linux-" + a + "-deb",
+            rpm: "linux-" + a + "-rpm",
+            suse: "linux-" + a + "-suse-rpm",
+            appimage: "linux-" + a + "-appimage"
+        }[family];
+        if (id && files[id]) { return id; }
+        if (family === "suse" && files["linux-" + a + "-appimage"]) { return "linux-" + a + "-appimage"; }
+        return null;
+    }
+
+    // Best available platform id, or null (Linux with unknown distro -> visitor chooses)
+    function choosePlatform(os, arch, distro, files) {
+        if (os === "linux") { return distro ? linuxPlatform(distro, arch, files) : null; }
+        var prefs = {
+            windows: arch === "arm64" ? ["windows-arm64", "windows-x64"] : ["windows-x64"],
+            macos: arch === "arm64" ? ["macos-arm64", "macos-x64"] : ["macos-x64", "macos-arm64"]
+        }[os] || [];
+        for (var i = 0; i < prefs.length; i++) { if (files[prefs[i]]) { return prefs[i]; } }
+        return null;
+    }
+
+    function osOf(platform) { return platform.split("-")[0]; }
+
+    // ------------------------------------------------------------------
+    // Downloads and clipboard
+    // ------------------------------------------------------------------
+    function fileUrl(file) {
+        // Encode for a safe URL, but keep "=" and "," readable (valid in a path)
+        var path = encodeURIComponent(file).replace(/%3D/gi, "=").replace(/%2C/gi, ",");
+        return new URL(path, new URL(CONFIG.manifestUrl, location.href)).href;
+    }
+
+    function formatSize(bytes) {
+        if (!bytes) { return ""; }
+        return new Intl.NumberFormat(lang, { maximumFractionDigits: 1 }).format(bytes / 1048576) + " MB";
+    }
+
+    function markStarted() {
+        try { sessionStorage.setItem(CONFIG.sessionKey, "1"); } catch (e) { /* ignore */ }
+        setStatus(T.started);
+    }
+
+    function startDownload(entry) {
+        var a = el("a", { href: fileUrl(entry.file), download: entry.file });
+        a.style.display = "none";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    }
+
+    // Link that downloads a platform file and shows its steps when clicked
+    function downloadLink(platform, manifest, attrs, text) {
+        var entry = manifest.files[platform];
+        attrs = attrs || {};
+        attrs.href = fileUrl(entry.file);
+        attrs.download = entry.file;
+        var a = el("a", attrs, text);
+        a.addEventListener("click", function () {
+            markStarted();
+            renderPrimary(platform, manifest);
+        });
+        return a;
+    }
+
+    function copyText(text, button, label) {
+        function done(ok) {
+            button.textContent = ok ? T.copied : label;
+            if (!ok) { setStatus(T.copyFail); }
+            setTimeout(function () { button.textContent = label; }, 2000);
+        }
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(text).then(function () { done(true); }, function () { done(legacyCopy(text)); });
+        } else {
+            done(legacyCopy(text));
+        }
+    }
+
+    function legacyCopy(text) {
+        var ta = el("textarea");
+        ta.value = text;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        var ok = false;
+        try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+        ta.remove();
+        return ok;
+    }
+
+    function copyButton(label, text) {
+        var b = el("button", { "class": "btn small", type: "button" }, label);
+        b.addEventListener("click", function () { copyText(text, b, label); });
+        return b;
+    }
+
+    // Collapsible terminal command: <details> with a <pre> and a copy button
+    function terminalBlock(summary, description, command, extraClass) {
+        var d = el("details", { "class": extraClass || "inline" });
+        d.appendChild(el("summary", null, summary));
+        if (description) { d.appendChild(el("p", null, description)); }
+        d.appendChild(el("pre", null, command));
+        d.appendChild(copyButton(T.copyCmd, command));
+        return d;
+    }
+
+    // Server values in clear text (ID server, relay, API, key), for manual entry
+    function serverValues(server) {
+        var lines = [];
+        ["host", "relay", "api", "key"].forEach(function (k) {
+            if (server && server[k]) { lines.push(T.fields[k] + ": " + server[k]); }
+        });
+        return el("pre", null, lines.join("\n"));
+    }
+
+    // "host=...,key=...[,relay=...][,api=...]" for "rustdesk --config"
+    function plainConfig(server) {
+        var parts = ["host=" + server.host, "key=" + server.key];
+        if (server.relay) { parts.push("relay=" + server.relay); }
+        if (server.api) { parts.push("api=" + server.api); }
+        return parts.join(",");
+    }
+
+    // ------------------------------------------------------------------
+    // Rendering
+    // ------------------------------------------------------------------
+    function renderSteps(platform, manifest) {
+        var os = osOf(platform);
+        var s = T.s;
+        var list = $("steps-list");
+        var extra = $("steps-extra");
+        list.textContent = "";
+        extra.textContent = "";
+
+        var file = manifest.files[platform].file;
+        var dl = '"$(xdg-user-dir DOWNLOAD)/' + file + '"';
+        var isAppImage = /appimage$/.test(platform);
+        var items = [];
+
+        function step(markup, child) { var li = html("li", markup); if (child) { li.appendChild(child); } items.push(li); }
+        function configSteps() {
+            var wrap = el("div");
+            wrap.appendChild(copyButton(T.copyConfig, manifest.config));
+            step(s.cfgCopy, wrap);
+            step(s.cfgOpen);
+            step(s.cfgImport, serverValues(manifest.server));
+        }
+
+        if (os === "windows") {
+            step(s.winOpen);
+        } else if (os === "macos") {
+            step(s.macDrag);
+            step(s.macLaunch);
+            step(s.macPerms);
+            configSteps();
+        } else if (isAppImage) {
+            step(s.linAppImage, terminalBlock(T.terminal, null, "chmod +x " + dl + " && " + dl));
+            configSteps();
+        } else {
+            var cmd = /suse-rpm$/.test(platform) ? "sudo zypper install " + dl
+                : /rpm$/.test(platform) ? "sudo dnf install " + dl
+                : "sudo apt install " + dl;
+            step(s.linInstall, terminalBlock(T.terminal, null, cmd));
+            step(s.linLaunch);
+            configSteps();
+        }
+        step(s.ready);
+        if (os === "linux") { step(s.linShare); }
+        step(s.tell);
+
+        items.forEach(function (li) { list.appendChild(li); });
+
+        // "rustdesk --config" works only on an installed client (not AppImage)
+        if ((os === "macos" || os === "linux") && !isAppImage) {
+            var bin = os === "macos" ? "/Applications/RustDesk.app/Contents/MacOS/RustDesk" : "rustdesk";
+            extra.appendChild(terminalBlock(T.terminalConfig, T.terminalConfigText,
+                "sudo " + bin + " --config '" + plainConfig(manifest.server) + "'", "more"));
+        }
+        $("steps").classList.remove("hidden");
+    }
+
+    function renderPrimary(platform, manifest) {
+        var entry = manifest.files[platform];
+        var os = osOf(platform);
+        var box = $("primary");
+        box.textContent = "";
+
+        var a = el("a", { "class": "btn", href: fileUrl(entry.file), download: entry.file }, T.download);
+        a.addEventListener("click", markStarted);
+        box.appendChild(a);
+        box.appendChild(el("p", { "class": "sub" }, (PLATFORM_LABELS[platform] || OS_NAMES[os]) + " · " + formatSize(entry.size)));
+
+        // macOS: offer the other architecture (detection is best effort)
+        var other = platform === "macos-arm64" ? "macos-x64" : platform === "macos-x64" ? "macos-arm64" : null;
+        if (other && manifest.files[other]) {
+            box.appendChild(downloadLink(other, manifest, { "class": "alt" },
+                platform === "macos-arm64" ? T.altMacIntel : T.altMacArm));
+        }
+        // Linux: let the visitor switch package family
+        if (os === "linux") {
+            var sw = el("a", { "class": "alt", href: "#" }, T.wrongLinux);
+            sw.addEventListener("click", function (ev) { ev.preventDefault(); renderLinuxChoice(manifest, arch); });
+            box.appendChild(sw);
+        }
+        renderSteps(platform, manifest);
+    }
+
+    // Linux with unknown distribution: one button per package family
+    function renderLinuxChoice(manifest, arch) {
+        var box = $("primary");
+        box.textContent = "";
+        $("steps").classList.add("hidden");
+        box.appendChild(el("p", null, T.chooseLinux));
+        var wrap = el("div", { "class": "choices" });
+        ["deb", "rpm", "suse", "appimage"].forEach(function (family) {
+            var platform = linuxPlatform(family, arch, manifest.files);
+            if (!platform || (family === "suse" && !/suse/.test(platform))) { return; }
+            var a = downloadLink(platform, manifest, { "class": "choice" });
+            a.appendChild(el("strong", null, T.linuxDistros[family][0]));
+            a.appendChild(el("span", null, T.linuxDistros[family][1] + " · " + formatSize(manifest.files[platform].size)));
+            wrap.appendChild(a);
+        });
+        box.appendChild(wrap);
+    }
+
+    function renderOthers(manifest, open) {
+        var list = $("others-list");
+        list.textContent = "";
+        Object.keys(PLATFORM_LABELS).forEach(function (p) {
+            if (!manifest.files[p]) { return; }
+            var li = el("li");
+            li.appendChild(downloadLink(p, manifest, null, PLATFORM_LABELS[p]));
+            li.appendChild(document.createTextNode(" — " + formatSize(manifest.files[p].size)));
+            list.appendChild(li);
+        });
+        if (list.children.length) { $("others").classList.remove("hidden"); }
+        $("others").open = !!open;
+    }
+
+    // ------------------------------------------------------------------
+    // Main
+    // ------------------------------------------------------------------
+    document.title = CONFIG.brand ? T.title + " - " + CONFIG.brand : T.title;
+    $("title").textContent = T.title;
+    $("intro").textContent = T.intro;
+    $("others-title").textContent = T.others;
+    $("steps-title").textContent = T.stepsTitle;
+    setStatus(T.preparing);
+
+    var os = detectOS();
+    var distro = os === "linux" ? detectDistro() : null;
+    var arch = "x64";
+    if (OS_NAMES[os]) { $("os").textContent = fmt(T.detected, { os: OS_NAMES[os] }); }
+
+    Promise.all([
+        fetch(CONFIG.manifestUrl, { cache: "no-store" }).then(function (r) {
+            if (!r.ok) { throw new Error("HTTP " + r.status); }
+            return r.json();
+        }),
+        detectArch(os)
+    ]).then(function (res) {
+        var manifest = res[0];
+        arch = res[1];
+        if (!manifest || !manifest.files) { throw new Error("Invalid manifest"); }
+        $("footer").textContent = fmt(T.footer, { version: manifest.version || "" });
+
+        var platform = choosePlatform(os, arch, distro, manifest.files);
+        renderOthers(manifest, !platform && os !== "linux");
+
+        if (os === "mobile") { $("intro").textContent = T.mobile; setStatus(""); return; }
+
+        if (os === "linux" && !platform) {
+            // Distribution unknown: no automatic download, the visitor picks the package
+            $("intro").textContent = T.introChoose;
+            renderLinuxChoice(manifest, arch);
+            setStatus("");
+            return;
+        }
+        if (!platform) {
+            $("intro").textContent = OS_NAMES[os] ? T.noFile : T.unknown;
+            setStatus("");
+            return;
+        }
+
+        renderPrimary(platform, manifest);
+
+        var already = false;
+        try { already = !!sessionStorage.getItem(CONFIG.sessionKey); } catch (e) { /* ignore */ }
+        if (!CONFIG.autoDownload) { $("intro").textContent = T.introChoose; setStatus(""); return; }
+        if (already) { setStatus(T.already); return; }
+
+        setTimeout(function () {
+            markStarted();
+            setTimeout(function () { startDownload(manifest.files[platform]); }, 500);
+        }, CONFIG.autoDownloadDelayMs);
+    }).catch(function (err) {
+        if (window.console) { console.error("Download page:", err); }
+        $("intro").textContent = T.error;
+        setStatus("");
+    });
+})();
+</script>
+
+</body>
+</html>
